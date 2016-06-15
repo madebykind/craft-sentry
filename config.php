@@ -1,8 +1,8 @@
 <?php
 
 return array(
-    'dsn' => !empty($_ENV['SENTRY_DSN']) ? $_ENV['SENTRY_DSN'] : '',
-    'publicDsn' => !empty($_ENV['SENTRY_PUBLIC_DSN']) ? $_ENV['SENTRY_PUBLIC_DSN'] : '',
+    'dsn' => '',
+    'publicDsn' => '',
     'reportJsErrors' => 0,
     'ignoredErrorCodes' => '',
     'jsRegexFilter' => '',
