@@ -6,6 +6,6 @@ $vendorDir = dirname(dirname(__FILE__));
 $baseDir = dirname($vendorDir);
 
 return array(
-    'Raven_' => array($vendorDir . '/raven/raven/lib'),
-    'Composer\\Installers\\' => array($vendorDir . '/composer/installers/src'),
+    'Raven_' => array($vendorDir . '/sentry/sentry/lib'),
+    'Psr\\Log\\' => array($vendorDir . '/psr/log'),
 );

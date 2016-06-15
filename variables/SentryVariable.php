@@ -17,39 +17,13 @@ namespace Craft;
 class SentryVariable
 {
     /**
-     * Settings.
-     *
-     * @var object
-     */
-    private $_settings;
-
-    /**
-     * Constructor.
-     *
-     * Gets plugin settings for internal use.
-     */
-    public function __construct()
-    {
-        $this->_settings = craft()->plugins->getPlugin('sentry')->getSettings();
-    }
-
-    /**
      * Returns Sentry DSN.
      *
      * @return string
      */
     public function dsn()
     {
-        return craft()->sentry->dsn();
-    }
-
-    /**
-     * True if the Sentry DSN is specified by the environment (.env or whatever)
-     * @return boolean
-     */
-    public function isDsnSpecifiedByEnv()
-    {
-        return craft()->sentry->isDsnSpecifiedByEnv();
+        return craft()->config->get('dsn', 'sentry');
     }
 
     /**
@@ -59,16 +33,7 @@ class SentryVariable
      */
     public function publicDsn()
     {
-        return craft()->sentry->publicDsn();
-    }
-    
-    /**
-     * True if the Sentry public DSN is specified by the environment (.env or whatever)
-     * @return boolean
-     */
-    public function isPublicDsnSpecifiedByEnv()
-    {
-        return craft()->sentry->isPublicDsnSpecifiedByEnv();
+        return craft()->config->get('publicDsn', 'sentry');
     }
 
     /**

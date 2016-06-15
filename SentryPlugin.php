@@ -18,235 +18,199 @@ use Raven_Client;
  */
 class SentryPlugin extends BasePlugin
 {
-    /**
-     * Get plugin name.
-     *
-     * @return string
-     */
-    public function getName()
-    {
-        return Craft::t('Sentry');
-    }
+	/**
+	 * Get plugin name.
+	 *
+	 * @return string
+	 */
+	public function getName()
+	{
+		return Craft::t('Sentry');
+	}
 
-    /**
-     * Get plugin version.
-     *
-     * @return string
-     */
-    public function getVersion()
-    {
-        return '1.1.1';
-    }
+	/**
+	 * Get plugin version.
+	 *
+	 * @return string
+	 */
+	public function getVersion()
+	{
+		return '1.1.1';
+	}
 
-    /**
-     * Get plugin developer.
-     *
-     * @return string
-     */
-    public function getDeveloper()
-    {
-        return 'Adam Burton / Bob Olde Hampsink';
-    }
+	/**
+	 * Get plugin developer.
+	 *
+	 * @return string
+	 */
+	public function getDeveloper()
+	{
+		return 'Adam Burton / Bob Olde Hampsink';
+	}
 
-    /**
-     * Get plugin developer url.
-     *
-     * @return string
-     */
-    public function getDeveloperUrl()
-    {
-        return 'http://github.com/adamdburton';
-    }
+	/**
+	 * Get plugin developer url.
+	 *
+	 * @return string
+	 */
+	public function getDeveloperUrl()
+	{
+		return 'http://github.com/adamdburton';
+	}
 
-    /**
-     * Define plugin settings.
-     *
-     * @return array
-     */
-    protected function defineSettings()
-    {
-        return array(
-            'dsn' => AttributeType::String,
-            'publicDsn' => AttributeType::String,
-            'reportJsErrors' => array( 'default' => false, 'type' => AttributeType::Bool),
-            'ignoredErrorCodes' => array( 'default' => '', 'type' => AttributeType::String),
-            'jsRegexFilter' => array( 'default' => '',  AttributeType::String),
-            'reportInDevMode' => AttributeType::Bool
-        );
-    }
+	/**
+	 * Initialize Sentry.
+	 */
+	public function init()
+	{
+		try {
 
-    /**
-     * Get settings template.
-     *
-     * @return string
-     */
-    public function getSettingsHtml()
-    {
-        return craft()->templates->render('sentry/_settings', array(
-           'settings' => $this->getSettings(),
-        ));
-    }
+			// See if we have to report in devMode
+			if (craft()->config->get('devMode')) {
+				if (!craft()->config->get('reportJsErrors', 'sentry')) {
+					return;
+				}
+			}
 
-    /**
-     * Initialize Sentry.
-     */
-    public function init()
-    {
-        try {
-            // Get plugin settings
-            $settings = $this->getSettings();
+			$this->configureBackendSentry();
 
-            // See if we have to report in devMode
-            if (craft()->config->get('devMode')) {
-                if (!$settings->reportInDevMode) {
-                    return;
-                }
-            }
+			$this->configureFrontendSentry();
 
-            $this->configureBackendSentry();
+		} catch (Exception $e) {
+			SentryPlugin::log("Sentry encountered an error when trying to initialize: {$e}", LogLevel::Error);
+		}
+	}
 
-            $this->configureFrontendSentry();
+	/**
+	 * Hook into the errors and exceptions for the server
+	 * side if we should be
+	 * @return $this;
+	 */
+	protected function configureBackendSentry()
+	{
+		// Require Sentry vendor code
+		require_once CRAFT_PLUGINS_PATH.'sentry/vendor/autoload.php';
 
-        } catch (Exception $e) {
-            Craft::log("ERROR: The craft sentry plugin encountered an error wheil trying to initialize: {$e}", LogLevel::Error);
-        }
-    }
+		$dsn = craft()->config->get('dsn', 'sentry');
+		// Initialize Sentry
+		$client = new Raven_Client($dsn);
+		$client->tags_context(array('environment' => CRAFT_ENVIRONMENT));
+		$client->install();
+		$this->attachRavenErrorHandlers($client);
 
-    /**
-     * Hook into the errors and exceptions for the server
-     * side if we should be
-     * @return $this;
-     */
-    protected function configureBackendSentry()
-    {
-        // Get plugin settings
-        $settings = $this->getSettings();
+		return $this;
+	}
 
-        // Require Sentry vendor code
-        require_once CRAFT_PLUGINS_PATH.'sentry/vendor/autoload.php';
+	/**
+	 * Attaches the error and exception handlers
+	 * for Sentry using the given client.
+	 * @param  Raven_Client $client   Client to send the exceptions/messages to.
+	 */
+	protected function attachRavenErrorHandlers(Raven_Client $client)
+	{
+		// Log Craft Exceptions to Sentry
+		craft()->onException = function ($event) use ($client) {
+			if (!$this->shouldIgnoreException($event->exception)) {
+				$client->captureException($event->exception);
+			}
+		};
 
-        // Initialize Sentry
-        $client = new Raven_Client(craft()->sentry->dsn());
-        $client->tags_context(array('environment' => CRAFT_ENVIRONMENT));
+		// Log Craft Errors to Sentry
+		craft()->onError = function ($event) use ($client) {
+			$client->captureMessage($event->message);
+		};
 
-        $this->attachRavenErrorHandlers($client);
+		return $this;
+	}
 
-        return $this;
-    }
+	/**
+	 * Checks to see if the given HTTP exception should not be sent to Sentry
+	 * For example, we may not want to send 404s to sentry.
+	 * @param  \CHttpException $exception
+	 * @return boolean True if we should ignore the xception and not send it to Sentry
+	 */
+	protected function shouldIgnoreException($exception)
+	{
+		if ($exception instanceof \CHttpException) {
+			$ignoredCodes = explode(',', craft()->config->get('ignoredErrorCodes', 'sentry'));
+			foreach ($ignoredCodes as $ignoredCode) {
+				if ($exception->statusCode == intval($ignoredCode)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 
-    /**
-     * Attaches the error and exception handlers
-     * for Sentry using the given client.
-     * @param  Raven_Client $client   Client to send the exceptions/messages to.
-     */
-    protected function attachRavenErrorHandlers(Raven_Client $client)
-    {        
-        // Log Craft Exceptions to Sentry
-        craft()->onException = function ($event) use ($client) {
-            if (!$this->shouldIgnoreException($event->exception)) {
-                $client->captureException($event->exception);
-            }
-        };
+	/**
+	 * Includes the JS for front-end sentry.
+	 * @return $this
+	 */
+	protected function configureFrontendSentry()
+	{
 
-        // Log Craft Errors to Sentry
-        craft()->onError = function ($event) use ($client) {
-            $client->captureMessage($event->message);
-        };
+		if (!$this->isWebRequest()) {
+			return $this;
+		}
 
-        return $this;
-    }
+		if (!craft()->config->get('reportJsErrors', 'sentry')) {
+			return $this;
+		}
 
-    /**
-     * Checks to see if the given HTTP exception should not be sent to Sentry 
-     * For example, we may not want to send 404s to sentry.
-     * @param  \CHttpException $exception 
-     * @return boolean True if we should ignore the xception and not send it to Sentry
-     */
-    protected function shouldIgnoreException($exception)
-    {
-        if ($exception instanceof \CHttpException) {
-            $ignoredCodes = explode(',', $this->getSettings()->ignoredErrorCodes);
-            foreach ($ignoredCodes as $ignoredCode) {
-                if ($exception->statusCode == intval($ignoredCode)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
+		if (!$this->matchesJsFilter()) {
+			return $this;
+		}
 
-    /**
-     * Includes the JS for front-end sentry.
-     * @return $this
-     */
-    protected function configureFrontendSentry()
-    {
-        // Get plugin settings
-        $settings = $this->getSettings();
+		$publicDsn = craft()->config->get('publicDsn', 'sentry');
 
-        if (!$this->isWebRequest()) {
-            return $this;
-        }
+		if (empty($publicDsn)) {
+			return $this;
+		}
 
-        if (!$settings->reportJsErrors) {
-            return $this;
-        }
+		craft()->templates->includeJsFile('//cdn.ravenjs.com/3.0.5/raven.min.js');
 
-        if (!$this->matchesJsFilter()) {
-            return $this;
-        }
+		craft()->templates->includeJs("Raven.config('{$publicDsn}').install()");
 
-        craft()->templates->includeJsFile('https://cdn.ravenjs.com/1.1.22/jquery,native/raven.min.js');
+		return $this;
+	}
 
-        $publicDsn = craft()->sentry->publicDsn();
-        if (empty($publicDsn)) {
-            return $this;
-        }
+	/**
+	 * Checks to see if we should be including the Raven JS
+	 * based on the request URI filter (if specified)
+	 * @return boolean  True if we should include the JS, false otherwise.
+	 */
+	protected function matchesJsFilter()
+	{
 
-        craft()->templates->includeJs("Raven.config('{$publicDsn}').install()");
+		$jsRegexFilter = craft()->config->get('jsRegexFilter', 'sentry');
 
-        return $this;
-    }
+		// If no filter specified, show JS on every page.
+		if (empty($jsRegexFilter)) {
+			return true;
+		}
+		$uri = craft()->request->getRequestUri();
 
-    /**
-     * Checks to see if we should be including the Raven JS
-     * based on the request URI filter (if specified)
-     * @return boolean  True if we should include the JS, false otherwise.
-     */
-    protected function matchesJsFilter()
-    {
-        // Get plugin settings
-        $settings = $this->getSettings();
+		// Match using Regex
+		$matchResult = @preg_match($jsRegexFilter, $uri);
 
-        // If no filter specified, show JS on every page.
-        if (empty($settings->jsRegexFilter)) {
-            return true;
-        }
-        $uri = craft()->request->getRequestUri();
+		if ($matchResult === false) {
+			// Filter is not valid regex, so match using a simple filter.
+			return stripos($uri, $filter) !== false;
+		}
 
-        $filter = $settings->jsRegexFilter;
+		return ($matchResult === 1);
+	}
 
-        // Match using Regex
-        $matchResult = @preg_match($filter, $uri);
-            
-        if ($matchResult === false) {
-            // Filter is not valid regex, so match using a simple filter.
-            return stripos($uri, $filter) !== false;
-        }
-
-        return $matchResult === 1;
-    }
-
-    /**
-     * 
-     * @return boolean true if this is a web control panel request and the user is currently logged in.
-     */
-    protected function isWebRequest()
-    {
-        if (craft()->isConsole()){
-            return false;
-        }
-        return true;
-    }
+	/**
+	 *
+	 * @return boolean true if this is a web control panel request and the user is currently logged in.
+	 */
+	protected function isWebRequest()
+	{
+		if (craft()->isConsole()){
+			return false;
+		}
+		return true;
+	}
 
 }

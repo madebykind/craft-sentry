@@ -1,6 +1,10 @@
 <?php
 
 return array(
-    'sentryDsn' => !empty($_ENV['SENTRY_DSN']) ? $_ENV['SENTRY_DSN'] : '',
-    'sentryPublicDsn' => !empty($_ENV['SENTRY_PUBLIC_DSN']) ? $_ENV['SENTRY_PUBLIC_DSN'] : '',
+    'dsn' => !empty($_ENV['SENTRY_DSN']) ? $_ENV['SENTRY_DSN'] : '',
+    'publicDsn' => !empty($_ENV['SENTRY_PUBLIC_DSN']) ? $_ENV['SENTRY_PUBLIC_DSN'] : '',
+    'reportJsErrors' => 0,
+    'ignoredErrorCodes' => '',
+    'jsRegexFilter' => '',
+    'reportInDevMode' => 0,
 );
