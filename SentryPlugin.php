@@ -35,7 +35,7 @@ class SentryPlugin extends BasePlugin
 	 */
 	public function getVersion()
 	{
-		return '1.1.1';
+		return '2.0.0';
 	}
 
 	/**
@@ -45,7 +45,7 @@ class SentryPlugin extends BasePlugin
 	 */
 	public function getDeveloper()
 	{
-		return 'Adam Burton / Bob Olde Hampsink';
+		return 'Adam Burton / Bob Olde Hampsink / Tom Davies';
 	}
 
 	/**
@@ -55,7 +55,7 @@ class SentryPlugin extends BasePlugin
 	 */
 	public function getDeveloperUrl()
 	{
-		return 'http://github.com/adamdburton';
+		return 'http://github.com/madebykind';
 	}
 
 	/**
@@ -66,17 +66,17 @@ class SentryPlugin extends BasePlugin
 		try {
 
 			// See if we have to report in devMode
-			if (craft()->config->get('devMode')) {
-				if (!craft()->config->get('reportJsErrors', 'sentry')) {
-					return;
-				}
+			if (craft()->config->get('devMode') && !craft()->config->get('reportInDevMode', 'sentry'))
+			{
+				return;
 			}
 
 			$this->configureBackendSentry();
 
 			$this->configureFrontendSentry();
 
-		} catch (Exception $e) {
+		}
+		catch (Exception $e) {
 			SentryPlugin::log("Sentry encountered an error when trying to initialize: {$e}", LogLevel::Error);
 		}
 	}
@@ -94,7 +94,7 @@ class SentryPlugin extends BasePlugin
 		$dsn = craft()->config->get('dsn', 'sentry');
 		// Initialize Sentry
 		$client = new Raven_Client($dsn);
-		$client->tags_context(array('environment' => CRAFT_ENVIRONMENT));
+		$client->tags_context(['environment' => CRAFT_ENVIRONMENT]);
 		$client->install();
 		$this->attachRavenErrorHandlers($client);
 
@@ -110,7 +110,8 @@ class SentryPlugin extends BasePlugin
 	{
 		// Log Craft Exceptions to Sentry
 		craft()->onException = function ($event) use ($client) {
-			if (!$this->shouldIgnoreException($event->exception)) {
+			if (!$this->shouldIgnoreException($event->exception))
+			{
 				$client->captureException($event->exception);
 			}
 		};
@@ -131,10 +132,13 @@ class SentryPlugin extends BasePlugin
 	 */
 	protected function shouldIgnoreException($exception)
 	{
-		if ($exception instanceof \CHttpException) {
+		if ($exception instanceof \CHttpException)
+		{
 			$ignoredCodes = explode(',', craft()->config->get('ignoredErrorCodes', 'sentry'));
-			foreach ($ignoredCodes as $ignoredCode) {
-				if ($exception->statusCode == intval($ignoredCode)) {
+			foreach ($ignoredCodes as $ignoredCode)
+			{
+				if ($exception->statusCode == intval($ignoredCode))
+				{
 					return true;
 				}
 			}
@@ -148,22 +152,26 @@ class SentryPlugin extends BasePlugin
 	 */
 	protected function configureFrontendSentry()
 	{
-
-		if (!$this->isWebRequest()) {
+		// no front end reporting for console apps
+		if (craft()->isConsole())
+		{
 			return $this;
 		}
 
-		if (!craft()->config->get('reportJsErrors', 'sentry')) {
+		if (!craft()->config->get('reportJsErrors', 'sentry'))
+		{
 			return $this;
 		}
 
-		if (!$this->matchesJsFilter()) {
+		if (!$this->matchesJsFilter())
+		{
 			return $this;
 		}
 
 		$publicDsn = craft()->config->get('publicDsn', 'sentry');
 
-		if (empty($publicDsn)) {
+		if (empty($publicDsn))
+		{
 			return $this;
 		}
 
@@ -185,32 +193,23 @@ class SentryPlugin extends BasePlugin
 		$jsRegexFilter = craft()->config->get('jsRegexFilter', 'sentry');
 
 		// If no filter specified, show JS on every page.
-		if (empty($jsRegexFilter)) {
+		if (empty($jsRegexFilter))
+		{
 			return true;
 		}
+
 		$uri = craft()->request->getRequestUri();
 
 		// Match using Regex
 		$matchResult = @preg_match($jsRegexFilter, $uri);
 
-		if ($matchResult === false) {
+		if ($matchResult === false)
+		{
 			// Filter is not valid regex, so match using a simple filter.
 			return stripos($uri, $filter) !== false;
 		}
 
 		return ($matchResult === 1);
-	}
-
-	/**
-	 *
-	 * @return boolean true if this is a web control panel request and the user is currently logged in.
-	 */
-	protected function isWebRequest()
-	{
-		if (craft()->isConsole()){
-			return false;
-		}
-		return true;
 	}
 
 }
